@@ -1,0 +1,1012 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>素数ビート</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07040f;
+    --fg: #ffffff;
+    --gold: #ffd23f;
+    --pink: #ff3d8b;
+    --cyan: #3df5ff;
+    --dim: rgba(255,255,255,.6);
+  }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: 'Dela Gothic One', system-ui, sans-serif;
+    touch-action: manipulation; user-select: none; -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    padding: 16px; box-sizing: border-box; text-align: center;
+    overflow-y: auto; justify-content: safe center;
+    background: radial-gradient(ellipse at center, rgba(40,10,70,.55), rgba(7,4,15,.88));
+    transition: opacity .35s;
+  }
+  .hidden { opacity: 0; pointer-events: none; }
+  .logo { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+  .logo .jp {
+    font-size: clamp(48px, 14vw, 110px);
+    background: linear-gradient(90deg, var(--gold), var(--pink), var(--cyan), var(--gold));
+    background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: shine 3s linear infinite, bob 0.6s ease-in-out infinite alternate;
+    filter: drop-shadow(0 0 18px rgba(255,61,139,.6));
+  }
+  .logo .en { font-size: clamp(14px, 4vw, 22px); letter-spacing: .5em; color: var(--cyan); margin-top: 10px; padding-left: .5em; }
+  @keyframes shine { to { background-position: 300% 0; } }
+  @keyframes bob { to { transform: scale(1.04); } }
+  .desc { font-size: clamp(16px, 4.4vw, 22px); line-height: 1.6; margin: 6px 0 0; }
+  .desc b { color: var(--gold); }
+  .rules { list-style: none; padding: 0; margin: 0; font-family: system-ui, sans-serif; font-size: 14px; color: var(--dim); line-height: 1.9; }
+  .btn {
+    font-family: inherit; font-size: clamp(22px, 6vw, 30px); color: #1a0830;
+    padding: 14px 56px; border: 0; border-radius: 999px; cursor: pointer;
+    background: linear-gradient(135deg, var(--gold), #ff9a3d);
+    box-shadow: 0 0 0 4px rgba(255,210,63,.25), 0 0 40px rgba(255,210,63,.55);
+    animation: pulse 0.8s ease-in-out infinite;
+  }
+  .btn:active { transform: scale(.95); }
+  .btn.sub { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 2px rgba(255,255,255,.4); animation: none; font-size: 16px; padding: 10px 28px; text-decoration: none; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 10px rgba(255,210,63,.08), 0 0 60px rgba(255,210,63,.8); } }
+  .best { color: var(--gold); margin: 0; font-size: 18px; }
+  .keys { font-family: system-ui, sans-serif; font-size: 12px; color: var(--dim); margin: 0; }
+  .res-title { font-size: clamp(20px, 6vw, 30px); color: var(--pink); letter-spacing: .2em; }
+  .rank { font-size: min(28vw, 18vh, 160px); line-height: 1; opacity: 0; }
+  .rank.show { animation: stamp .45s cubic-bezier(.2,1.6,.4,1) forwards; }
+  @keyframes stamp { from { opacity: 0; transform: scale(3) rotate(-12deg); } to { opacity: 1; transform: scale(1) rotate(-6deg); } }
+  .res-score { font-size: min(12vw, 10vh, 72px); color: var(--gold); text-shadow: 0 0 24px rgba(255,210,63,.6); }
+  .newrec { font-size: 22px; color: var(--cyan); animation: blink .3s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
+  .stats { display: grid; grid-template-columns: repeat(4, auto); gap: 4px 20px; font-family: system-ui, sans-serif; font-size: 13px; color: var(--dim); }
+  .stats b { font-family: "Dela Gothic One", system-ui, sans-serif; }
+  .stats b { display: block; font-size: 22px; color: var(--fg); font-weight: normal; }
+  .lastmiss { font-family: system-ui, sans-serif; font-size: 15px; color: #ff8aa0; min-height: 1.2em; }
+  .near { font-size: 15px; color: var(--cyan); min-height: 1.2em; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  @media (max-width: 420px) { .stats { grid-template-columns: repeat(2, auto); } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="title" class="overlay">
+  <div class="logo"><span class="jp">素数ビート</span><span class="en">PRIME BEAT</span></div>
+  <p class="desc">リズムに合わせて数字がカウントアップ。<br><b>素数のときだけ</b>タップ！</p>
+  <ul class="rules">
+    <li>ビートぴったりほど高得点（PERFECT / GREAT / GOOD）</li>
+    <li>素数じゃないのにタップ・素数を見逃す → ライフ −1</li>
+    <li>20コンボで FEVER！ 曲が盛り上がって得点2倍</li>
+  </ul>
+  <button id="startBtn" class="btn">START</button>
+  <p class="best">BEST <span id="bestTitle">0</span></p>
+  <p class="keys">PCはスペース / F / J キーでもOK ・ 音が出ます</p>
+</div>
+
+<div id="result" class="overlay hidden">
+  <div class="res-title">GAME OVER</div>
+  <div class="rank" id="rRank">A</div>
+  <div class="res-score" id="rScore">0</div>
+  <div class="newrec hidden" id="rNew">NEW RECORD!!</div>
+  <div class="stats">
+    <div>到達<b id="rReach">0</b></div>
+    <div>素数ヒット<b id="rPrimes">0</b></div>
+    <div>最大コンボ<b id="rCombo">0</b></div>
+    <div>PERFECT<b id="rPerfect">0</b></div>
+  </div>
+  <div class="lastmiss" id="rMiss"></div>
+  <div class="near" id="rNear"></div>
+  <div class="row">
+    <button id="retryBtn" class="btn">もう一回</button>
+    <a id="shareBtn" class="btn sub" target="_blank" rel="noopener">結果をポスト</a>
+  </div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <div class="res-title">PAUSE</div>
+  <button id="resumeBtn" class="btn">再開</button>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- 数学 ----------
+function isPrime(n) {
+  if (n < 2) return false;
+  if (n % 2 === 0) return n === 2;
+  if (n % 3 === 0) return n === 3;
+  for (let i = 5; i * i <= n; i += 6) if (n % i === 0 || n % (i + 2) === 0) return false;
+  return true;
+}
+const SUP = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+function factorStr(n) {
+  if (n === 1) return '1 は素数じゃない！';
+  const counts = new Map();
+  let m = n;
+  for (let p = 2; p * p <= m; p++) while (m % p === 0) { counts.set(p, (counts.get(p) || 0) + 1); m /= p; }
+  if (m > 1) counts.set(m, (counts.get(m) || 0) + 1);
+  const parts = [...counts].map(([p, c]) => c > 1 ? p + String(c).split('').map(d => SUP[d]).join('') : String(p));
+  return `${n} = ${parts.join(' × ')}`;
+}
+const isPalindrome = n => { const s = String(n); return s.length > 1 && s === [...s].reverse().join(''); };
+const MERSENNE = new Set([3, 7, 31, 127, 8191]);
+
+// ---------- 保存 ----------
+function loadBest() { try { return Number(localStorage.getItem('primebeat-best')) || 0; } catch { return 0; } }
+function saveBest(v) { try { localStorage.setItem('primebeat-best', String(v)); } catch {} }
+
+// ---------- Canvas ----------
+const cvs = document.getElementById('c');
+const g = cvs.getContext('2d');
+let W = 0, H = 0;
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  cvs.width = W * dpr; cvs.height = H * dpr;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+addEventListener('resize', resize);
+resize();
+const FONT = '"Dela Gothic One", system-ui, sans-serif';
+
+// ---------- オーディオ ----------
+let AC = null, master = null, noiseBuf = null;
+const m2f = m => 440 * Math.pow(2, (m - 69) / 12);
+function initAudio() {
+  if (AC) return;
+  AC = new (window.AudioContext || window.webkitAudioContext)();
+  const comp = AC.createDynamicsCompressor();
+  comp.threshold.value = -12; comp.ratio.value = 4;
+  master = AC.createGain(); master.gain.value = 0.8;
+  master.connect(comp); comp.connect(AC.destination);
+  noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+}
+const latency = () => AC ? (AC.outputLatency || AC.baseLatency || 0) : 0;
+const audioNow = () => AC.currentTime - latency();
+
+function tone(t, f, dur, type = 'sine', vol = 0.2, attack = 0.004) {
+  const o = AC.createOscillator(), gn = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  gn.gain.setValueAtTime(0.0001, t);
+  gn.gain.linearRampToValueAtTime(vol, t + attack);
+  gn.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(gn).connect(master);
+  o.start(t); o.stop(t + dur + 0.05);
+  return o;
+}
+function noise(t, dur, type, freq, vol, q = 1) {
+  const s = AC.createBufferSource(); s.buffer = noiseBuf;
+  const f = AC.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  const gn = AC.createGain();
+  gn.gain.setValueAtTime(vol, t);
+  gn.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f).connect(gn).connect(master);
+  s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.02);
+  return f;
+}
+function kick(t, vol = 1) {
+  const o = AC.createOscillator(), gn = AC.createGain();
+  o.frequency.setValueAtTime(160, t);
+  o.frequency.exponentialRampToValueAtTime(42, t + 0.13);
+  gn.gain.setValueAtTime(vol, t);
+  gn.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  o.connect(gn).connect(master); o.start(t); o.stop(t + 0.4);
+}
+const hat = (t, v) => noise(t, 0.05, 'highpass', 8000, v);
+function clap(t, v) {
+  noise(t, 0.02, 'bandpass', 1300, v, 0.8);
+  noise(t + 0.012, 0.02, 'bandpass', 1300, v, 0.8);
+  noise(t + 0.024, 0.16, 'bandpass', 1300, v, 0.8);
+}
+function bass(t, midi, dur) {
+  const o = AC.createOscillator(), f = AC.createBiquadFilter(), gn = AC.createGain();
+  o.type = 'sawtooth'; o.frequency.value = m2f(midi);
+  f.type = 'lowpass'; f.Q.value = 6;
+  f.frequency.setValueAtTime(2200, t); f.frequency.exponentialRampToValueAtTime(180, t + dur);
+  gn.gain.setValueAtTime(0.3, t); gn.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(f).connect(gn).connect(master); o.start(t); o.stop(t + dur + 0.05);
+}
+
+// Am - F - C - G
+const CHORDS = [
+  { root: 45, arp: [69, 72, 76, 81] },
+  { root: 41, arp: [65, 69, 72, 77] },
+  { root: 48, arp: [67, 72, 76, 79] },
+  { root: 43, arp: [67, 71, 74, 79] },
+];
+const PENTA = [0, 3, 5, 7, 10];
+
+function musicLevel() {
+  const c = S.combo;
+  return c >= 40 ? 4 : c >= 20 ? 3 : c >= 10 ? 2 : c >= 4 ? 1 : 0;
+}
+function scheduleMusic(b) {
+  const t = b.time, iv = b.iv;
+  if (b.countIn) {
+    kick(t, 0.8);
+    tone(t, b.idx === COUNT_IN - 1 ? 1760 : 880, 0.12, 'square', 0.12);
+    return;
+  }
+  const L = musicLevel(), inBar = b.idx % 4, chord = CHORDS[Math.floor(b.idx / 8) % 4];
+  kick(t, 1);
+  if (L >= 1) hat(t + iv / 2, 0.22);
+  if (L >= 2) {
+    bass(t + iv / 2, chord.root, iv * 0.45);
+    if (b.idx % 8 === 0) chord.arp.forEach(m => tone(t, m2f(m - 12), iv * 7.5, 'triangle', 0.035, 0.25));
+  }
+  if (L >= 3) {
+    if (inBar % 2 === 1) clap(t, 0.45);
+    hat(t + iv / 4, 0.08); hat(t + iv * 3 / 4, 0.08);
+  }
+  if (L >= 4) {
+    const a = chord.arp;
+    tone(t, m2f(a[(b.idx * 2) % 4] + 12), iv * 0.4, 'square', 0.04);
+    tone(t + iv / 2, m2f(a[(b.idx * 2 + 1) % 4] + 12), iv * 0.4, 'square', 0.04);
+  }
+}
+
+function hitSound(judge) {
+  const t = AC.currentTime;
+  const i = (S.combo - 1) % 15;
+  const midi = 69 + PENTA[i % 5] + 12 * Math.floor(i / 5);
+  tone(t, m2f(midi), 0.35, 'triangle', 0.35);
+  tone(t, m2f(midi + 12), 0.15, 'square', 0.06);
+  if (judge === 'PERFECT') {
+    tone(t, m2f(midi + 24), 0.4, 'sine', 0.12);
+    tone(t + 0.06, m2f(midi + 31), 0.35, 'sine', 0.08);
+    noise(t, 0.25, 'highpass', 9000, 0.12);
+  }
+}
+function missSound() {
+  const t = AC.currentTime;
+  const o = AC.createOscillator(), f = AC.createBiquadFilter(), gn = AC.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(300, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.35);
+  f.type = 'lowpass'; f.frequency.value = 1200;
+  gn.gain.setValueAtTime(0.35, t); gn.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  o.connect(f).connect(gn).connect(master); o.start(t); o.stop(t + 0.45);
+  noise(t, 0.25, 'lowpass', 500, 0.5);
+}
+function riser() {
+  const t = AC.currentTime;
+  const f = noise(t, 1.0, 'bandpass', 300, 0.35, 4);
+  f.frequency.exponentialRampToValueAtTime(9000, t + 0.9);
+  const o = tone(t, 300, 1.0, 'sawtooth', 0.06, 0.6);
+  o.frequency.exponentialRampToValueAtTime(1800, t + 0.9);
+}
+function fanfare() {
+  const t = AC.currentTime;
+  [81, 85, 88, 93].forEach((m, i) => tone(t + i * 0.06, m2f(m), 0.25, 'square', 0.07));
+  tone(t + 0.24, m2f(105), 0.6, 'sine', 0.1);
+}
+function lifeUpSound() {
+  const t = AC.currentTime;
+  [88, 91, 100, 96, 98, 103].forEach((m, i) => tone(t + i * 0.07, m2f(m), 0.12, 'square', 0.06));
+}
+function tapeStop() {
+  const t = AC.currentTime;
+  const o = tone(t, 220, 1.3, 'sawtooth', 0.2, 0.01);
+  o.frequency.exponentialRampToValueAtTime(25, t + 1.2);
+  const o2 = tone(t, 110, 1.3, 'triangle', 0.3, 0.01);
+  o2.frequency.exponentialRampToValueAtTime(15, t + 1.2);
+}
+const blip = (f, v = 0.05) => AC && tone(AC.currentTime, f, 0.05, 'square', v);
+const buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
+
+// ---------- ゲーム状態 ----------
+const COUNT_IN = 4;
+const COUNT_LABELS = ['3', '2', '1', 'GO!'];
+const MAX_LIVES = 3;
+const FEVER_COMBO = 20;
+const bpmFor = n => Math.min(96 + Math.floor(Math.max(0, n - 1) / 20) * 8, 232);
+const comboMult = () => Math.min(1 + Math.floor(S.combo / 10), 8);
+
+const S = { started: false, running: false, paused: false };
+const particles = [], rings = [], floaters = [], banners = [], bgRings = [];
+let best = loadBest();
+document.getElementById('bestTitle').textContent = best.toLocaleString('en-US');
+
+function resetState() {
+  Object.assign(S, {
+    started: true, running: true, paused: false,
+    beats: [], beatCount: 0, genTime: AC.currentTime + 0.6, audioIdx: 0, judgeIdx: 0,
+    score: 0, dispScore: 0, combo: 0, maxCombo: 0, lives: MAX_LIVES,
+    primesHit: 0, perfects: 0, fever: false, lastBeatIdx: -1, lastMiss: '',
+    comboPop: 0, scoreBump: 0, numPop: 0, aberr: 0, zoom: 0, shake: 0, heartShake: 0,
+    flash: null, judge: null, reason: null, frozenNow: 0, overAt: 0,
+  });
+  particles.length = rings.length = floaters.length = banners.length = bgRings.length = 0;
+}
+
+function generateBeats() {
+  while (S.genTime < AC.currentTime + 4) {
+    const idx = S.beatCount, countIn = idx < COUNT_IN, n = countIn ? 0 : idx - COUNT_IN + 1;
+    const iv = 60 / bpmFor(countIn ? 1 : n);
+    S.beats.push({
+      idx, n, iv, time: S.genTime, countIn,
+      prime: !countIn && isPrime(n), judged: countIn, result: null,
+      label: countIn ? COUNT_LABELS[idx] : null,
+    });
+    S.genTime += iv; S.beatCount++;
+  }
+  while (S.audioIdx < S.beats.length && S.beats[S.audioIdx].time < AC.currentTime + 0.2) {
+    scheduleMusic(S.beats[S.audioIdx++]);
+  }
+}
+
+function judgePassed(now) {
+  for (let i = S.judgeIdx; i < S.beats.length; i++) {
+    const b = S.beats[i];
+    if (now <= b.time + b.iv * 0.5) break;
+    S.judgeIdx = i + 1;
+    if (b.judged) continue;
+    b.judged = true;
+    if (b.prime) {
+      b.result = 'missed';
+      doMiss(`${b.n} は素数！`);
+      if (!S.running) return;
+    } else {
+      b.result = 'pass';
+      S.score += 10 * comboMult();
+    }
+  }
+}
+
+// ---------- 入力 ----------
+function onTap(x, y) {
+  if (!S.running || S.paused) return;
+  if (x != null) rings.push({ x, y, r: 6, vr: 260, life: 0.35, max: 0.35, color: '255,255,255', w: 2 });
+  const t = audioNow();
+  let bestB = null, bd = Infinity;
+  for (let i = Math.max(0, S.judgeIdx - 2); i < S.beats.length; i++) {
+    const d = Math.abs(t - S.beats[i].time);
+    if (d < bd) { bd = d; bestB = S.beats[i]; }
+    if (S.beats[i].time > t + 1) break;
+  }
+  if (!bestB || bestB.countIn || bestB.judged || bd > bestB.iv * 0.5) return;
+  bestB.judged = true;
+  if (bestB.prime) hit(bestB, t - bestB.time);
+  else { bestB.result = 'wrong'; doMiss(factorStr(bestB.n)); }
+}
+
+function hit(b, off) {
+  b.result = 'hit';
+  const a = Math.abs(off);
+  const judge = a <= 0.05 ? 'PERFECT' : a <= 0.1 ? 'GREAT' : 'GOOD';
+  S.combo++; S.primesHit++;
+  S.maxCombo = Math.max(S.maxCombo, S.combo);
+  if (judge === 'PERFECT') S.perfects++;
+  const base = { PERFECT: 300, GREAT: 200, GOOD: 100 }[judge];
+  let pts = base * comboMult() * (S.fever ? 2 : 1);
+
+  // 特殊な素数ボーナス
+  const prev = S.beats.find(x => x.n === b.n - 2);
+  const bonuses = [];
+  if (prev && prev.result === 'hit') bonuses.push(['双子素数！', 1000]);
+  if (isPalindrome(b.n)) bonuses.push(['回文素数！', 2000]);
+  if (MERSENNE.has(b.n)) bonuses.push(['メルセンヌ素数！', 3000]);
+  bonuses.forEach(([, p]) => pts += p);
+  S.score += pts;
+
+  const { cx, cy } = numberPos();
+  const col = { PERFECT: '255,210,63', GREAT: '61,245,255', GOOD: '125,255,138' }[judge];
+  const count = { PERFECT: 70, GREAT: 45, GOOD: 28 }[judge] + Math.min(S.combo, 60);
+  burst(cx, cy, count, judge === 'PERFECT' ? GOLDS : [`rgb(${col})`, '#fff'], 1 + S.combo / 60);
+  rings.push({ x: cx, y: cy, r: 20, vr: 900, life: 0.45, max: 0.45, color: col, w: 10 });
+  if (judge === 'PERFECT') rings.push({ x: cx, y: cy, r: 10, vr: 520, life: 0.6, max: 0.6, color: '255,255,255', w: 4 });
+  S.judge = { text: judge, color: `rgb(${col})`, t0: performance.now() };
+  S.reason = null;
+  S.numPop = 1; S.comboPop = 1; S.zoom = judge === 'PERFECT' ? 0.05 : 0.03;
+  S.shake = Math.max(S.shake, judge === 'PERFECT' ? 7 : 4);
+  S.flash = { color: col, a: judge === 'PERFECT' ? 0.22 : 0.12 };
+  floaters.push({ text: '+' + pts.toLocaleString('en-US'), x0: cx, y0: cy - 40, t0: performance.now(), dur: 650, color: `rgb(${col})` });
+  hitSound(judge);
+  buzz(12);
+
+  bonuses.forEach(([name, p], i) => setTimeout(() => {
+    banner(name, `+${p.toLocaleString('en-US')}`, '#ff3d8b');
+    fanfare(); confetti(60);
+  }, 120 + i * 500));
+
+  if (S.combo === FEVER_COMBO) {
+    S.fever = true;
+    banner('FEVER!!', '得点 ×2', '#ffd23f', true);
+    riser(); confetti(140);
+    S.flash = { color: '255,255,255', a: 0.6 }; S.shake = 18;
+  } else if (S.combo % 25 === 0 || S.combo === 10) {
+    banner(`${S.combo} COMBO!!`, `×${comboMult()}`, '#3df5ff');
+    fanfare(); confetti(80);
+  }
+  if (S.combo % 30 === 0 && S.lives < MAX_LIVES) {
+    S.lives++;
+    setTimeout(() => { banner('LIFE UP', '♥ +1', '#ff3d8b'); lifeUpSound(); }, 250);
+  }
+}
+
+function doMiss(reason) {
+  const wasFever = S.fever;
+  S.combo = 0; S.fever = false; S.lives--;
+  S.lastMiss = reason;
+  S.judge = { text: 'MISS', color: '#ff3d5a', t0: performance.now() };
+  S.reason = { text: reason, t0: performance.now() };
+  S.shake = 22; S.aberr = 1; S.heartShake = 1;
+  S.flash = { color: '255,40,80', a: 0.45 };
+  const { cx, cy } = numberPos();
+  burst(cx, cy, 30, ['#ff3d5a', '#550016', '#ff8aa0'], 0.8);
+  missSound(); buzz([60, 40, 60]);
+  if (wasFever && S.lives > 0) banner('FEVER END', '', '#888');
+  if (S.lives <= 0) gameOver();
+}
+
+function gameOver() {
+  S.running = false;
+  S.frozenNow = audioNow();
+  S.overAt = performance.now();
+  tapeStop();
+  S.flash = { color: '255,0,60', a: 0.8 };
+  S.shake = 30;
+  setTimeout(showResult, 1300);
+}
+
+// ---------- エフェクト ----------
+const GOLDS = ['#ffd23f', '#fff3b0', '#ffb703', '#ffffff', '#ff9a3d'];
+const CONFETTI = ['#ffd23f', '#ff3d8b', '#3df5ff', '#7dff8a', '#b46bff', '#ffffff'];
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[(Math.random() * a.length) | 0];
+function burst(x, y, n, colors, power = 1) {
+  for (let i = 0; i < n; i++) {
+    const ang = Math.random() * Math.PI * 2, sp = rnd(150, 650) * power;
+    particles.push({
+      x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, grav: 500, drag: 2.2,
+      life: rnd(0.5, 1.1), max: 1.1, size: rnd(2, 6) * Math.min(power, 2), color: pick(colors),
+      shape: Math.random() < 0.3 ? 'star' : 'dot', rot: 0, vrot: 0,
+    });
+  }
+}
+function confetti(n) {
+  for (let i = 0; i < n; i++) {
+    particles.push({
+      x: rnd(0, W), y: rnd(-60, -10), vx: rnd(-80, 80), vy: rnd(100, 400), grav: 300, drag: 0.6,
+      life: rnd(1.8, 3), max: 3, size: rnd(5, 10), color: pick(CONFETTI),
+      shape: 'rect', rot: rnd(0, 6), vrot: rnd(-10, 10),
+    });
+  }
+}
+function banner(text, sub, color, big = false) {
+  banners.push({ text, sub, color, big, t0: performance.now(), dur: 1500 });
+}
+
+// ---------- 背景の星 ----------
+const stars = Array.from({ length: 140 }, () => ({ x: rnd(-1, 1), y: rnd(-1, 1), z: rnd(0.05, 1) }));
+
+// ---------- レイアウト ----------
+function numberPos() { return { cx: W / 2, cy: H * 0.44 }; }
+
+// ---------- ループ ----------
+let lastFrame = performance.now();
+function frame() {
+  requestAnimationFrame(frame);
+  const pnow = performance.now();
+  const dt = Math.min((pnow - lastFrame) / 1000, 0.05);
+  lastFrame = pnow;
+
+  let now = pnow / 1000;
+  if (S.started) {
+    now = S.running ? audioNow() : S.frozenNow;
+    if (S.running && !S.paused) { generateBeats(); judgePassed(audioNow()); now = audioNow(); }
+  }
+  update(dt);
+  draw(now, dt);
+}
+
+function update(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    p.vx -= p.vx * p.drag * dt; p.vy -= p.vy * p.drag * dt;
+    p.vy += p.grav * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vrot * dt;
+  }
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const r = rings[i];
+    r.life -= dt; r.r += r.vr * dt; r.vr *= 1 - 3 * dt;
+    if (r.life <= 0) rings.splice(i, 1);
+  }
+  const k = Math.exp(-dt * 10);
+  S.shake = (S.shake || 0) * Math.exp(-dt * 12);
+  S.numPop = (S.numPop || 0) * k;
+  S.comboPop = (S.comboPop || 0) * k;
+  S.scoreBump = (S.scoreBump || 0) * k;
+  S.zoom = (S.zoom || 0) * Math.exp(-dt * 8);
+  S.aberr = Math.max(0, (S.aberr || 0) - dt * 2.5);
+  S.heartShake = Math.max(0, (S.heartShake || 0) - dt * 2);
+  if (S.flash) { S.flash.a *= Math.exp(-dt * 7); if (S.flash.a < 0.01) S.flash = null; }
+  if (S.started) S.dispScore += (S.score - S.dispScore) * Math.min(1, dt * 10);
+}
+
+function currentBeat(now) {
+  if (!S.beats || !S.beats.length) return null;
+  let cb = null;
+  for (let i = Math.max(0, S.judgeIdx - 3); i < S.beats.length; i++) {
+    if (S.beats[i].time <= now) cb = S.beats[i]; else break;
+  }
+  if (!cb) return null;
+  // 早押しでヒットしたら次の数字を先に出す
+  const nx = S.beats[cb.idx + 1];
+  if (nx && nx.result === 'hit' && now > nx.time - nx.iv * 0.5) return nx;
+  return cb;
+}
+
+function onBeatVisual(b) {
+  bgRings.push({ t0: performance.now() });
+  if (b.countIn) return;
+  const prev = S.beats[b.idx - 1];
+  if (prev && !prev.countIn && bpmFor(b.n) > bpmFor(prev.n)) {
+    banner('SPEED UP!', `${bpmFor(b.n)} BPM`, '#b46bff');
+    blip(1320, 0.06);
+  }
+  if (b.n % 100 === 0) {
+    banner(`${b.n} 突破！`, '', '#ffd23f', true);
+    confetti(120); fanfare();
+  }
+}
+
+// ---------- 描画 ----------
+function draw(now, dt) {
+  const cb = S.started ? currentBeat(now) : null;
+  if (cb && cb.idx !== S.lastBeatIdx && S.running) {
+    // 早押し時は次の拍に切り替わるので、通過した拍ぶん処理する
+    for (let i = S.lastBeatIdx + 1; i <= cb.idx; i++) onBeatVisual(S.beats[i]);
+    S.lastBeatIdx = cb.idx;
+  }
+  const beatAge = cb ? Math.max(0, now - cb.time) : (now % 0.6);
+  const pulse = Math.exp(-beatAge * 7);
+  const level = S.started ? musicLevel() : 0;
+  const fever = S.started && S.fever;
+  const hue = fever ? (performance.now() / 12) % 360 : 265 - level * 22;
+
+  // 背景
+  const bg = g.createRadialGradient(W / 2, H * 0.44, 0, W / 2, H * 0.44, Math.max(W, H) * 0.8);
+  bg.addColorStop(0, `hsl(${hue},70%,${14 + pulse * 10 + (fever ? 6 : 0)}%)`);
+  bg.addColorStop(1, '#07040f');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+
+  // シェイク + ズーム
+  g.save();
+  const sh = S.shake || 0;
+  g.translate(W / 2 + rnd(-sh, sh), H / 2 + rnd(-sh, sh));
+  g.scale(1 + (S.zoom || 0) + pulse * 0.008, 1 + (S.zoom || 0) + pulse * 0.008);
+  g.translate(-W / 2, -H / 2);
+
+  drawStars(dt, level, pulse, hue, fever);
+  if (fever) drawRays(hue, pulse);
+  drawBgRings(hue);
+
+  if (S.started && cb) {
+    drawLane(now);
+    drawNumber(cb, pulse);
+    drawJudge();
+  }
+
+  // パーティクル
+  g.globalCompositeOperation = 'lighter';
+  for (const p of particles) {
+    const a = Math.min(1, p.life / (p.max * 0.5));
+    g.globalAlpha = a; g.fillStyle = p.color;
+    if (p.shape === 'rect') {
+      g.globalCompositeOperation = 'source-over';
+      g.save(); g.translate(p.x, p.y); g.rotate(p.rot);
+      g.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2); g.restore();
+      g.globalCompositeOperation = 'lighter';
+    } else if (p.shape === 'star') {
+      drawStar(p.x, p.y, p.size * 1.6);
+    } else {
+      g.beginPath(); g.arc(p.x, p.y, p.size, 0, Math.PI * 2); g.fill();
+    }
+  }
+  for (const r of rings) {
+    g.globalAlpha = Math.max(0, r.life / r.max);
+    g.strokeStyle = `rgb(${r.color})`; g.lineWidth = r.w * (r.life / r.max) + 1;
+    g.beginPath(); g.arc(r.x, r.y, r.r, 0, Math.PI * 2); g.stroke();
+  }
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  g.restore();
+
+  if (S.started) {
+    drawFloaters();
+    drawHUD(cb, pulse, hue);
+  }
+  drawBanners();
+
+  if (S.flash) {
+    g.fillStyle = `rgba(${S.flash.color},${S.flash.a})`;
+    g.fillRect(0, 0, W, H);
+  }
+  // ゲームオーバー時のモノクロ寄りの暗転
+  if (S.started && !S.running) {
+    const k = Math.min(1, (performance.now() - S.overAt) / 1200);
+    g.fillStyle = `rgba(7,4,15,${k * 0.55})`; g.fillRect(0, 0, W, H);
+  }
+}
+
+function drawStar(x, y, r) {
+  g.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const rr = i % 2 ? r * 0.35 : r, a = i * Math.PI / 4;
+    g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  g.closePath(); g.fill();
+}
+
+function drawStars(dt, level, pulse, hue, fever) {
+  const speed = 0.15 + level * 0.12 + pulse * 0.6;
+  const cx = W / 2, cy = H * 0.44, sc = Math.max(W, H) * 0.5;
+  g.lineCap = 'round';
+  stars.forEach((s, i) => {
+    const zPrev = s.z;
+    s.z -= dt * speed;
+    if (s.z <= 0.03) { s.x = rnd(-1, 1); s.y = rnd(-1, 1); s.z = 1; return; }
+    const x1 = cx + s.x / s.z * sc, y1 = cy + s.y / s.z * sc;
+    const x0 = cx + s.x / (zPrev + 0.02 + speed * 0.05) * sc, y0 = cy + s.y / (zPrev + 0.02 + speed * 0.05) * sc;
+    g.strokeStyle = fever ? `hsla(${(hue + i * 7) % 360},100%,70%,${1 - s.z})` : `rgba(255,255,255,${(1 - s.z) * 0.8})`;
+    g.lineWidth = (1 - s.z) * 3;
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+  });
+}
+
+function drawRays(hue, pulse) {
+  const cx = W / 2, cy = H * 0.44, R = Math.max(W, H) * 1.2, n = 14;
+  const rot = performance.now() / 1500;
+  g.fillStyle = `hsla(${hue},100%,65%,${0.07 + pulse * 0.08})`;
+  for (let i = 0; i < n; i++) {
+    const a = rot + i * Math.PI * 2 / n;
+    g.beginPath(); g.moveTo(cx, cy);
+    g.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+    g.lineTo(cx + Math.cos(a + Math.PI / n) * R, cy + Math.sin(a + Math.PI / n) * R);
+    g.closePath(); g.fill();
+  }
+}
+
+function drawBgRings(hue) {
+  const cx = W / 2, cy = H * 0.44, pn = performance.now();
+  for (let i = bgRings.length - 1; i >= 0; i--) {
+    const age = (pn - bgRings[i].t0) / 1000;
+    if (age > 1) { bgRings.splice(i, 1); continue; }
+    g.strokeStyle = `hsla(${hue},100%,70%,${(1 - age) * 0.35})`;
+    g.lineWidth = 3;
+    g.beginPath(); g.arc(cx, cy, 60 + age * Math.max(W, H) * 0.7, 0, Math.PI * 2); g.stroke();
+  }
+}
+
+function drawLane(now) {
+  const y = H * 0.75, hitX = W / 2;
+  const spacing = Math.min(W * 0.2, 130);
+  const r = Math.min(W * 0.065, 32);
+
+  // レーン
+  const lg = g.createLinearGradient(0, 0, W, 0);
+  lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, 'rgba(255,255,255,.35)'); lg.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = lg; g.fillRect(0, y - 1, W, 2);
+
+  // ヒット位置
+  g.strokeStyle = 'rgba(255,210,63,.9)'; g.lineWidth = 3;
+  g.beginPath(); g.arc(hitX, y, r + 8, 0, Math.PI * 2); g.stroke();
+  g.strokeStyle = 'rgba(255,210,63,.25)'; g.lineWidth = 10;
+  g.beginPath(); g.arc(hitX, y, r + 8, 0, Math.PI * 2); g.stroke();
+
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = Math.max(0, S.judgeIdx - 4); i < S.beats.length; i++) {
+    const b = S.beats[i];
+    if (b.countIn) continue;
+    const x = hitX + (b.time - now) / b.iv * spacing;
+    if (x > W + r * 2) break;
+    if (x < -r * 2) continue;
+    const dist = Math.abs(x - hitX) / (W / 2);
+    let fill = 'rgba(20,10,40,.85)', stroke = 'rgba(255,255,255,.7)', txt = '#fff', alpha = Math.max(0.15, 1 - dist * 0.8);
+    let rr = r, yy = y;
+    if (b.result === 'hit') { fill = '#ffd23f'; stroke = '#fff'; txt = '#2a1400'; }
+    else if (b.result === 'wrong' || b.result === 'missed') { fill = '#ff3d5a'; stroke = '#fff'; }
+    else if (b.result === 'pass') { alpha *= 0.35; }
+    if (x < hitX && b.result === 'hit') { const k = (hitX - x) / spacing; yy -= k * 40; alpha *= Math.max(0, 1 - k * 0.6); }
+    g.globalAlpha = alpha;
+    g.fillStyle = fill; g.strokeStyle = stroke; g.lineWidth = 2.5;
+    g.beginPath(); g.arc(x, yy, rr, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.fillStyle = txt;
+    const fs = rr * (String(b.n).length >= 3 ? 0.72 : 0.95);
+    g.font = `${fs}px ${FONT}`;
+    g.fillText(b.n, x, yy + 1);
+  }
+  g.globalAlpha = 1;
+}
+
+function drawNumber(cb, pulse) {
+  const { cx, cy } = numberPos();
+  const label = cb.countIn ? cb.label : String(cb.n);
+  const len = label.length;
+  let size = Math.min(W * 0.4, H * 0.3) * (len >= 4 ? 0.62 : len === 3 ? 0.8 : 1);
+  if (cb.countIn) size *= 0.75;
+  const scale = 1 + pulse * 0.16 + (S.numPop || 0) * 0.45;
+  g.save();
+  g.translate(cx, cy); g.scale(scale, scale);
+  if (cb.result === 'hit') g.rotate(Math.sin(performance.now() / 60) * 0.03 * (S.numPop || 0));
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `${size}px ${FONT}`;
+
+  let color = '#ffffff', glow = 'rgba(180,107,255,.9)';
+  if (cb.countIn) { color = '#3df5ff'; glow = 'rgba(61,245,255,.9)'; }
+  if (cb.result === 'hit') { color = '#ffd23f'; glow = 'rgba(255,210,63,1)'; }
+  if (cb.result === 'wrong' || cb.result === 'missed') { color = '#ff3d5a'; glow = 'rgba(255,61,90,1)'; }
+
+  if (S.aberr > 0) {
+    const o = S.aberr * 14;
+    g.globalCompositeOperation = 'lighter';
+    g.fillStyle = 'rgba(255,0,60,.8)'; g.fillText(label, -o, 0);
+    g.fillStyle = 'rgba(0,220,255,.8)'; g.fillText(label, o, o * 0.3);
+    g.globalCompositeOperation = 'source-over';
+  }
+  g.shadowColor = glow; g.shadowBlur = 30 + pulse * 30 + (S.numPop || 0) * 40;
+  g.fillStyle = color;
+  g.fillText(label, 0, 0);
+  g.shadowBlur = 0;
+  g.restore();
+}
+
+function drawJudge() {
+  const { cx } = numberPos();
+  const pn = performance.now();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  if (S.judge) {
+    const age = (pn - S.judge.t0) / 1000;
+    if (age < 0.8) {
+      const s = 1 + 0.6 * Math.exp(-age * 14);
+      g.globalAlpha = Math.min(1, (0.8 - age) / 0.3);
+      g.save(); g.translate(cx, H * 0.62); g.scale(s, s);
+      g.font = `${Math.min(W * 0.1, 48)}px ${FONT}`;
+      g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,.6)'; g.strokeText(S.judge.text, 0, 0);
+      g.fillStyle = S.judge.color; g.fillText(S.judge.text, 0, 0);
+      g.restore();
+    }
+  }
+  if (S.reason) {
+    const age = (pn - S.reason.t0) / 1000;
+    if (age < 1.6) {
+      g.globalAlpha = Math.min(1, (1.6 - age) / 0.4);
+      g.font = `${Math.min(W * 0.06, 26)}px ${FONT}`;
+      g.fillStyle = '#ff8aa0';
+      g.fillText(S.reason.text, cx, H * 0.67);
+    }
+  }
+  g.globalAlpha = 1;
+}
+
+function drawFloaters() {
+  const pn = performance.now();
+  const tx = 24, ty = 44;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = floaters.length - 1; i >= 0; i--) {
+    const f = floaters[i];
+    const k = (pn - f.t0) / f.dur;
+    if (k >= 1) { floaters.splice(i, 1); S.scoreBump = 1; continue; }
+    // 最初は上に跳ねて、その後スコアへ吸い込まれる
+    const e = k < 0.35 ? 0 : Math.pow((k - 0.35) / 0.65, 2);
+    const x = f.x0 + (tx + 60 - f.x0) * e;
+    const y = f.y0 - Math.sin(Math.min(k / 0.35, 1) * Math.PI / 2) * 30 + (ty - f.y0 + 30) * e;
+    const s = 1.2 - e * 0.6;
+    g.font = `${Math.min(W * 0.07, 32) * s}px ${FONT}`;
+    g.lineWidth = 5; g.strokeStyle = 'rgba(0,0,0,.5)'; g.strokeText(f.text, x, y);
+    g.fillStyle = f.color; g.fillText(f.text, x, y);
+  }
+}
+
+function drawHUD(cb, pulse, hue) {
+  const pad = 20;
+  // スコア
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.font = `12px ${FONT}`; g.fillStyle = 'rgba(255,255,255,.6)';
+  g.fillText('SCORE', pad, 22);
+  const sb = 1 + (S.scoreBump || 0) * 0.25;
+  g.save(); g.translate(pad, 48); g.scale(sb, sb);
+  g.font = `${Math.min(W * 0.075, 34)}px ${FONT}`;
+  g.fillStyle = S.scoreBump > 0.05 ? '#ffd23f' : '#fff';
+  g.fillText(Math.round(S.dispScore).toLocaleString('en-US'), 0, 0);
+  g.restore();
+
+  // ライフ
+  g.textAlign = 'right';
+  g.font = `${Math.min(W * 0.07, 30)}px ${FONT}`;
+  for (let i = 0; i < MAX_LIVES; i++) {
+    const alive = i < S.lives;
+    const x = W - pad - (MAX_LIVES - 1 - i) * 34;
+    const jitter = !alive && i === S.lives ? rnd(-1, 1) * S.heartShake * 8 : 0;
+    g.fillStyle = alive ? '#ff3d8b' : 'rgba(255,255,255,.18)';
+    g.fillText('♥', x + jitter, 40 + jitter);
+  }
+
+  // BPM・倍率
+  g.textAlign = 'center';
+  const bpm = cb && !cb.countIn ? bpmFor(cb.n) : bpmFor(1);
+  g.font = `12px ${FONT}`; g.fillStyle = 'rgba(255,255,255,.55)';
+  g.fillText(`${bpm} BPM`, W / 2, 22);
+  const mult = comboMult() * (S.fever ? 2 : 1);
+  if (mult > 1) {
+    g.font = `${Math.min(W * 0.06, 24)}px ${FONT}`;
+    g.fillStyle = S.fever ? `hsl(${hue},100%,65%)` : '#3df5ff';
+    g.fillText(`×${mult}`, W / 2, 46);
+  }
+
+  // フィーバーゲージ
+  const gw = Math.min(W - pad * 2, 420), gx = (W - gw) / 2, gy = 70;
+  g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(gx, gy, gw, 6);
+  if (S.fever) {
+    const gr = g.createLinearGradient(gx, 0, gx + gw, 0);
+    for (let i = 0; i <= 6; i++) gr.addColorStop(i / 6, `hsl(${(hue + i * 60) % 360},100%,60%)`);
+    g.fillStyle = gr; g.fillRect(gx, gy - 1, gw, 8);
+    g.font = `11px ${FONT}`; g.fillStyle = '#fff';
+    g.fillText('FEVER', W / 2, gy + 20);
+  } else {
+    const k = Math.min(S.combo / FEVER_COMBO, 1);
+    g.fillStyle = k > 0.75 ? `rgba(255,210,63,${0.7 + pulse * 0.3})` : '#ffd23f';
+    g.fillRect(gx, gy, gw * k, 6);
+  }
+
+  // コンボ
+  if (S.combo >= 2) {
+    const s = 1 + (S.comboPop || 0) * 0.5;
+    g.save(); g.translate(W / 2, Math.max(H * 0.18, 125)); g.scale(s, s);
+    g.font = `${Math.min(W * 0.13, 64)}px ${FONT}`;
+    g.fillStyle = S.fever ? `hsl(${hue},100%,70%)` : '#fff';
+    g.shadowColor = 'rgba(61,245,255,.8)'; g.shadowBlur = 20;
+    g.fillText(S.combo, 0, 0);
+    g.shadowBlur = 0;
+    g.font = `${Math.min(W * 0.035, 15)}px ${FONT}`;
+    g.fillStyle = 'rgba(255,255,255,.75)';
+    g.fillText('COMBO', 0, Math.min(W * 0.13, 64) * 0.62);
+    g.restore();
+  }
+
+  // 操作ヒント（序盤のみ）
+  if (cb && (cb.countIn || cb.n < 12)) {
+    g.font = `${Math.min(W * 0.04, 16)}px ${FONT}`;
+    g.fillStyle = `rgba(255,255,255,${0.5 + pulse * 0.3})`;
+    g.fillText('素数が ◯ に来たらタップ！', W / 2, H * 0.87);
+  }
+}
+
+function drawBanners() {
+  const pn = performance.now();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = banners.length - 1; i >= 0; i--) {
+    const b = banners[i];
+    const k = (pn - b.t0) / b.dur;
+    if (k >= 1) { banners.splice(i, 1); continue; }
+    const inK = Math.min(k / 0.12, 1);
+    const back = 1 + 2.7 * Math.pow(inK - 1, 3) + 1.7 * Math.pow(inK - 1, 2);
+    const s = (k < 0.12 ? back : 1 + (k - 0.12) * 0.08) * (b.big ? 1.3 : 1);
+    const a = k > 0.75 ? (1 - k) / 0.25 : 1;
+    g.save();
+    g.globalAlpha = a;
+    g.translate(W / 2, H * 0.3 - i * 8); g.scale(s, s);
+    g.rotate(-0.06);
+    const fs = Math.min(W * 0.11, 64);
+    g.font = `${fs}px ${FONT}`;
+    g.lineWidth = 10; g.strokeStyle = 'rgba(0,0,0,.65)'; g.strokeText(b.text, 0, 0);
+    g.fillStyle = b.color; g.shadowColor = b.color; g.shadowBlur = 25;
+    g.fillText(b.text, 0, 0);
+    g.shadowBlur = 0;
+    if (b.sub) {
+      g.font = `${fs * 0.4}px ${FONT}`;
+      g.lineWidth = 6; g.strokeText(b.sub, 0, fs * 0.75);
+      g.fillStyle = '#fff'; g.fillText(b.sub, 0, fs * 0.75);
+    }
+    g.restore();
+  }
+  g.globalAlpha = 1;
+}
+
+// ---------- 画面遷移 ----------
+const $ = id => document.getElementById(id);
+const titleEl = $('title'), resultEl = $('result'), pauseEl = $('pause');
+let resultReadyAt = Infinity;
+
+async function start() {
+  initAudio();
+  if (AC.state !== 'running') await AC.resume();
+  try { await document.fonts.load(`40px ${FONT}`); } catch {}
+  titleEl.classList.add('hidden');
+  resultEl.classList.add('hidden');
+  $('rRank').classList.remove('show');
+  resetState();
+}
+
+function rankFor(s) {
+  return s >= 200000 ? 'SSS' : s >= 100000 ? 'SS' : s >= 50000 ? 'S' : s >= 25000 ? 'A' : s >= 10000 ? 'B' : s >= 3000 ? 'C' : 'D';
+}
+const RANK_COLORS = { SSS: '#ff3d8b', SS: '#ffd23f', S: '#ffd23f', A: '#3df5ff', B: '#7dff8a', C: '#ffffff', D: '#888888' };
+
+function showResult() {
+  const reached = S.beats.filter(b => b.judged && !b.countIn).reduce((m, b) => Math.max(m, b.n), 0);
+  const isNew = S.score > best;
+  const prevBest = best;
+  if (isNew) { best = S.score; saveBest(best); }
+  $('bestTitle').textContent = best.toLocaleString('en-US');
+  $('rReach').textContent = reached;
+  $('rPrimes').textContent = S.primesHit;
+  $('rCombo').textContent = S.maxCombo;
+  $('rPerfect').textContent = S.perfects;
+  $('rMiss').textContent = S.lastMiss ? `最後のミス： ${S.lastMiss}` : '';
+  $('rNew').classList.add('hidden');
+  const near = !isNew && prevBest > 0 ? prevBest - S.score : 0;
+  $('rNear').textContent = near > 0 && near <= prevBest * 0.3 ? `自己ベストまで あと ${near.toLocaleString('en-US')} 点！` : '';
+  const rank = rankFor(S.score);
+  $('rRank').textContent = rank;
+  $('rRank').style.color = RANK_COLORS[rank];
+  $('rRank').style.textShadow = `0 0 40px ${RANK_COLORS[rank]}`;
+  const text = `素数ビートで ${S.score.toLocaleString('en-US')}点（ランク${rank}）！ ${reached}まで到達、最大${S.maxCombo}コンボ #素数ビート`;
+  $('shareBtn').href = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text);
+  resultEl.classList.remove('hidden');
+  resultReadyAt = performance.now() + 900;
+
+  // スコアのカウントアップ
+  const target = S.score, t0 = performance.now(), dur = 1100;
+  let lastTick = 0;
+  const step = () => {
+    const k = Math.min((performance.now() - t0) / dur, 1);
+    const v = Math.round(target * (1 - Math.pow(1 - k, 3)));
+    $('rScore').textContent = v.toLocaleString('en-US');
+    if (performance.now() - lastTick > 45 && k < 1) { blip(900 + k * 1200, 0.03); lastTick = performance.now(); }
+    if (k < 1) requestAnimationFrame(step);
+    else {
+      $('rRank').classList.add('show');
+      kick(AC.currentTime, 1); fanfare();
+      if (isNew) { $('rNew').classList.remove('hidden'); confetti(200); lifeUpSound(); }
+    }
+  };
+  step();
+}
+
+$('startBtn').addEventListener('click', start);
+$('retryBtn').addEventListener('click', () => { if (performance.now() >= resultReadyAt) start(); });
+
+cvs.addEventListener('pointerdown', e => { e.preventDefault(); onTap(e.clientX, e.clientY); });
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.code;
+  if (!['Space', 'Enter', 'KeyF', 'KeyJ', 'KeyK', 'KeyD'].includes(k)) return;
+  e.preventDefault();
+  if (!titleEl.classList.contains('hidden')) return void start();
+  if (!resultEl.classList.contains('hidden')) { if (performance.now() >= resultReadyAt) start(); return; }
+  if (!pauseEl.classList.contains('hidden')) return void resume();
+  onTap(W / 2, H * 0.75);
+});
+
+// タブ切替時は一時停止（オーディオの時計ごと止める）
+function resume() {
+  pauseEl.classList.add('hidden');
+  AC.resume().then(() => { S.paused = false; });
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && S.running && !S.paused) {
+    S.paused = true;
+    AC.suspend();
+    pauseEl.classList.remove('hidden');
+  }
+});
+$('resumeBtn').addEventListener('click', resume);
+
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
